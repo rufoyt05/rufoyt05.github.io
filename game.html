@@ -2,143 +2,159 @@
 <html lang="az">
 <head>
     <meta charset="UTF-8">
-    <title>Rufo 3D Battle | Rufo YT CLASS</title>
+    <title>Rufo 3D Shooter | Rufo YT CLASS</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
         canvas { display: block; }
         #ui { position: absolute; top: 20px; left: 20px; color: white; pointer-events: none; }
-        .health-container { width: 200px; height: 20px; background: #444; border: 2px solid #fff; margin-top: 10px; }
-        #player-health { width: 100%; height: 100%; background: #00ff00; transition: 0.3s; }
-        #enemy-health-container { position: absolute; top: 20px; right: 20px; }
-        #enemy-health { width: 200px; height: 20px; background: #ff0000; border: 2px solid #fff; }
-        #enemy-bar { width: 100%; height: 100%; background: #ff0000; }
-        #msg { position: absolute; bottom: 20px; width: 100%; text-align: center; color: #ff0000; font-size: 24px; font-weight: bold; text-shadow: 2px 2px #000; }
+        .bar-bg { width: 250px; height: 15px; background: rgba(0,0,0,0.5); border: 2px solid #fff; margin-top: 5px; border-radius: 10px; overflow: hidden; }
+        #player-health { width: 100%; height: 100%; background: linear-gradient(90deg, #00ff00, #008800); }
+        #enemy-health-container { position: absolute; top: 20px; right: 20px; text-align: right; }
+        #enemy-bar { width: 100%; height: 100%; background: linear-gradient(90deg, #ff0000, #880000); }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.5); border-radius: 50%; transform: translate(-50%, -50%); }
+        #msg { position: absolute; top: 50%; width: 100%; text-align: center; color: #ff0000; font-size: 48px; font-weight: bold; text-shadow: 3px 3px #000; display: none; }
     </style>
 </head>
 <body>
 
+    <div id="crosshair"></div>
     <div id="ui">
-        <h2 style="color: #ff0000; margin: 0;">RUFO 3D BATTLE</h2>
-        <p>W,A,S,D - Hərəkət | SPACE - YUMRUQ</p>
-        <div class="health-container"><div id="player-health"></div></div>
+        <h2 style="color: #ff0000; margin: 0; font-style: italic;">RUFO YT CLASS SHOOTER</h2>
+        <p>W,A,S,D - Hərəkət | MOUSE - Atəş (Güllə)</p>
+        <div class="bar-bg"><div id="player-health"></div></div>
     </div>
 
     <div id="enemy-health-container">
-        <div style="color: white; text-align: right;">DÜŞMƏN</div>
-        <div id="enemy-health"><div id="enemy-bar"></div></div>
+        <div style="color: white; font-weight: bold;">BOSS DÜŞMƏN</div>
+        <div class="bar-bg"><div id="enemy-bar"></div></div>
     </div>
 
-    <div id="msg"></div>
+    <div id="msg">OYUN BİTDİ</div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
-        // Səhnə və Kamera
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x111111);
+        scene.background = new THREE.Color(0x050505);
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // İşıqlandırma
-        const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(5, 10, 7.5);
+        // İşıqlandırma (Daha dramatik)
+        const light = new THREE.PointLight(0xffffff, 1, 100);
+        light.position.set(10, 10, 10);
         scene.add(light);
-        scene.add(new THREE.AmbientLight(0x404040));
+        scene.add(new THREE.AmbientLight(0x222222));
 
-        // Arena
-        const floorGeo = new THREE.GridHelper(20, 20, 0xff0000, 0x444444);
-        scene.add(floorGeo);
+        // Zəmin (Kibertank stili)
+        const grid = new THREE.GridHelper(100, 50, 0xff0000, 0x222222);
+        scene.add(grid);
 
-        // OYUNÇU (Mavi Kub)
-        const playerGeo = new THREE.BoxGeometry(0.7, 1.5, 0.7);
-        const playerMat = new THREE.MeshStandardMaterial({ color: 0x0077ff });
-        const player = new THREE.Mesh(playerGeo, playerMat);
-        player.position.y = 0.75;
-        scene.add(player);
-
-        // QOL (Vuruş üçün)
-        const armGeo = new THREE.BoxGeometry(0.3, 0.3, 0.8);
-        const armMat = new THREE.MeshStandardMaterial({ color: 0x0077ff });
-        const arm = new THREE.Mesh(armGeo, armMat);
-        arm.position.set(0.4, 0.3, -0.5);
-        arm.visible = false;
-        player.add(arm);
-
-        // DÜŞMƏN (Qırmızı Kub)
-        const enemyGeo = new THREE.BoxGeometry(0.8, 1.5, 0.8);
-        const enemyMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-        const enemy = new THREE.Mesh(enemyGeo, enemyMat);
-        enemy.position.set(0, 0.75, -5);
-        scene.add(enemy);
-
-        // Dəyişənlər
-        let playerHP = 100;
-        let enemyHP = 100;
-        let canAttack = true;
-        const keys = {};
-
-        window.addEventListener('keydown', (e) => keys[e.code] = true);
-        window.addEventListener('keyup', (e) => keys[e.code] = false);
-
-        function attack() {
-            if (!canAttack) return;
-            canAttack = false;
-            arm.visible = true;
-
-            // Vuruş məsafəsi yoxlanışı
-            const dist = player.position.distanceTo(enemy.position);
-            if (dist < 2) {
-                enemyHP -= 10;
-                document.getElementById('enemy-bar').style.width = enemyHP + "%";
-                enemy.material.emissive.setHex(0xffffff); // Düşmən ağarır (zərbə effekti)
-                setTimeout(() => enemy.material.emissive.setHex(0x000000), 100);
-            }
-
-            setTimeout(() => {
-                arm.visible = false;
-                canAttack = true;
-            }, 200);
+        // Xarakter yaratma funksiyası (Daha "insan" bənzəri)
+        function createCharacter(color) {
+            const group = new THREE.Group();
+            // Bədən
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.3), new THREE.MeshStandardMaterial({color}));
+            body.position.y = 0.8;
+            group.add(body);
+            // Baş
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), new THREE.MeshStandardMaterial({color: 0xffdbac}));
+            head.position.y = 1.4;
+            group.add(head);
+            // Silah/Qol
+            const gun = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.6), new THREE.MeshStandardMaterial({color: 0x222222}));
+            gun.position.set(0.4, 1.0, -0.4);
+            group.add(gun);
+            return group;
         }
 
+        const player = createCharacter(0x0000ff);
+        scene.add(player);
+
+        const enemy = createCharacter(0xff0000);
+        enemy.position.set(0, 0, -10);
+        scene.add(enemy);
+
+        // Güllə Sistemi
+        const bullets = [];
+        function shoot() {
+            const bullet = new THREE.Mesh(
+                new THREE.SphereGeometry(0.08, 8, 8),
+                new THREE.MeshBasicMaterial({color: 0xffff00})
+            );
+            bullet.position.set(player.position.x + 0.4, 1.0, player.position.z - 0.5);
+            
+            // Güllənin hərəkət istiqaməti
+            const direction = new THREE.Vector3(0, 0, -1);
+            bullet.userData.velocity = direction.multiplyScalar(0.5);
+            
+            scene.add(bullet);
+            bullets.push(bullet);
+        }
+
+        let playerHP = 100, enemyHP = 100;
+        const keys = {};
+        window.addEventListener('keydown', (e) => keys[e.code] = true);
+        window.addEventListener('keyup', (e) => keys[e.code] = false);
+        window.addEventListener('mousedown', shoot);
+
         function update() {
-            if (enemyHP <= 0) {
-                document.getElementById('msg').innerText = "QƏLƏBƏ! DÜŞMƏN MƏĞLUB OLDU!";
+            if (playerHP <= 0 || enemyHP <= 0) {
+                document.getElementById('msg').style.display = "block";
+                document.getElementById('msg').innerText = enemyHP <= 0 ? "QƏLƏBƏ!" : "MƏĞLUBİYYƏT!";
                 return;
             }
 
-            // Hərəkət
-            if (keys['KeyW']) player.position.z -= 0.1;
-            if (keys['KeyS']) player.position.z += 0.1;
-            if (keys['KeyA']) player.position.x -= 0.1;
-            if (keys['KeyD']) player.position.x += 0.1;
-            if (keys['Space']) attack();
+            // Oyunçu Hərəkəti
+            if (keys['KeyW']) player.position.z -= 0.12;
+            if (keys['KeyS']) player.position.z += 0.12;
+            if (keys['KeyA']) player.position.x -= 0.12;
+            if (keys['KeyD']) player.position.x += 0.12;
 
-            // Kamera takibi
-            camera.position.set(player.position.x, player.position.y + 4, player.position.z + 6);
-            camera.lookAt(player.position);
+            // Güllələrin hərəkəti və toqquşma
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.position.add(b.userData.velocity);
 
-            // Sadə Düşmən AI (Sənə tərəf gəlir)
-            const dist = player.position.distanceTo(enemy.position);
-            if (dist > 1.5) {
-                const dir = new THREE.Vector3().subVectors(player.position, enemy.position).normalize();
-                enemy.position.x += dir.x * 0.03;
-                enemy.position.z += dir.z * 0.03;
-            } else {
-                // Düşmən sənə vurur
-                playerHP -= 0.1;
-                document.getElementById('player-health').style.width = Math.max(0, playerHP) + "%";
-                if (playerHP <= 0) document.getElementById('msg').innerText = "MƏĞLUBİYYƏT!";
+                // Düşmənə dəydimi?
+                if (b.position.distanceTo(enemy.position) < 1) {
+                    enemyHP -= 5;
+                    document.getElementById('enemy-bar').style.width = enemyHP + "%";
+                    scene.remove(b);
+                    bullets.splice(i, 1);
+                    // Effekt: Düşmən qırmızı parlasın
+                    enemy.children[0].material.emissive.setHex(0xff0000);
+                    setTimeout(() => enemy.children[0].material.emissive.setHex(0x000000), 50);
+                }
+                // Güllə çox uzağa getdisə sil
+                else if (b.position.z < -50) {
+                    scene.remove(b);
+                    bullets.splice(i, 1);
+                }
             }
+
+            // Düşmən AI (Təqib və hücum)
+            const dist = player.position.distanceTo(enemy.position);
+            if (dist > 2) {
+                const dir = new THREE.Vector3().subVectors(player.position, enemy.position).normalize();
+                enemy.position.x += dir.x * 0.05;
+                enemy.position.z += dir.z * 0.05;
+                enemy.lookAt(player.position);
+            } else {
+                playerHP -= 0.2;
+                document.getElementById('player-health').style.width = playerHP + "%";
+            }
+
+            // Kamera (Oyunçu arxası - TPS baxış)
+            camera.position.set(player.position.x, player.position.y + 3, player.position.z + 8);
+            camera.lookAt(player.position);
 
             renderer.render(scene, camera);
             requestAnimationFrame(update);
         }
 
         update();
-
-        // Pəncərə ölçüsü dəyişəndə düzəlt
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
