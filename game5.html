@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+    <meta charset="UTF-8">
+    <title>Rufo City | Audi Edition</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: 'Orbitron', sans-serif; }
+        canvas { display: block; }
+        #ui { position: absolute; bottom: 30px; right: 30px; color: white; text-align: right; pointer-events: none; z-index: 100; }
+        #speed { font-size: 70px; font-weight: 900; font-style: italic; line-height: 1; text-shadow: 0 0 15px rgba(0,0,0,0.5); }
+        .unit { font-size: 20px; color: #ff0000; margin-left: 5px; font-weight: bold; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 24px; }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div id="loading">Audi Yüklənir...</div>
+
+    <div id="ui">
+        <div id="speed">0</div>
+        <div class="unit">KM/H</div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+    <script>
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        document.body.appendChild(renderer.domElement);
+
+        // İşıqlandırma (Realistik)
+        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+        const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+        sun.position.set(100, 200, 100);
+        scene.add(sun);
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 200, 2000);
+
+        // Boz Yol
+        const roadGeo = new THREE.PlaneGeometry(45, 10000);
+        const roadMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 });
+        const road = new THREE.Mesh(roadGeo, roadMat);
+        road.rotation.x = -Math.PI / 2;
+        scene.add(road);
+
+        // Şəhər Binaları
+        const buildings = [];
+        for(let i=0; i<300; i++) {
+            const h = 30 + Math.random() * 100;
+            const b = new THREE.Mesh(
+                new THREE.BoxGeometry(20, h, 20), 
+                new THREE.MeshStandardMaterial({ color: 0xdddddd })
+            );
+            let x = (Math.random() > 0.5 ? 1 : -1) * (40 + Math.random() * 60);
+            let z = -(Math.random() * 4000);
+            b.position.set(x, h/2, z);
+            scene.add(b);
+            buildings.push(new THREE.Box3().setFromObject(b));
+        }
+
+        // --- AUDI GLB YÜKLƏMƏ ---
+        let playerCar;
+        const loader = new THREE.GLTFLoader();
+
+        loader.load('audi.glb', function(gltf) {
+            playerCar = gltf.scene;
+            
+            // Maşın çox böyükdürsə bu rəqəmi kiçilt (məs: 0.5), kiçikdirsə böyüt (məs: 2.5)
+            playerCar.scale.set(1.5, 1.5, 1.5); 
+            
+            scene.add(playerCar);
+            document.getElementById('loading').style.display = 'none';
+        }, undefined, function(error) {
+            console.error('Model yüklənmədi:', error);
+            document.getElementById('loading').innerText = "Fayl tapılmadı (audi.glb)";
+        });
+
+        // İdarəetmə
+        let speed = 0, angle = 0, targetAngle = 0;
+        const keys = {};
+        window.addEventListener('keydown', e => keys[e.code] = true);
+        window.addEventListener('keyup', e => keys[e.code] = false);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (!playerCar) return;
+
+            let isTurbo = keys['ShiftLeft'];
+            
+            // Tənzimlənmiş Sürət (W və S)
+            if (keys['KeyW']) speed = Math.min(speed + 0.015, isTurbo ? 2.5 : 1.5);
+            else if (keys['KeyS']) speed = Math.max(speed - 0.03, -0.6);
+            else speed *= 0.985;
+
+            // Dönmə (A və D)
+            if (Math.abs(speed) > 0.05) {
+                if (keys['KeyA']) targetAngle += 0.035;
+                if (keys['KeyD']) targetAngle -= 0.035;
+            }
+            angle += (targetAngle - angle) * 0.1;
+
+            const nextX = playerCar.position.x + Math.sin(angle) * speed;
+            const nextZ = playerCar.position.z + Math.cos(angle) * speed;
+
+            // Toqquşma yoxlanışı
+            const carBox = new THREE.Box3().setFromCenterAndSize(
+                new THREE.Vector3(nextX, 1, nextZ), 
+                new THREE.Vector3(2.5, 1, 5)
+            );
+            
+            let hit = false;
+            for(let b of buildings) {
+                if(carBox.intersectsBox(b)) { hit = true; break; }
+            }
+
+            if(!hit) {
+                playerCar.position.set(nextX, 0, nextZ);
+            } else {
+                speed = -speed * 0.3;
+            }
+
+            playerCar.rotation.y = angle;
+
+            // Kamera İzləmə
+            const camOffset = new THREE.Vector3(0, 4, 12).applyQuaternion(playerCar.quaternion);
+            camera.position.lerp(playerCar.position.clone().add(camOffset), 0.1);
+            camera.lookAt(playerCar.position);
+
+            document.getElementById('speed').innerText = Math.floor(Math.abs(speed) * 120);
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
