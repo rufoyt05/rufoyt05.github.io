@@ -2,29 +2,40 @@
 <html lang="az">
 <head>
     <meta charset="UTF-8">
-    <title>Rufo 3D FPS Style | Rufo YT CLASS</title>
+    <title>Rufo 3D Combat | Rufo YT CLASS</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
         canvas { display: block; }
         #ui { position: absolute; top: 20px; left: 20px; color: white; pointer-events: none; z-index: 10; }
-        .bar-bg { width: 200px; height: 10px; background: rgba(255,255,255,0.2); border: 1px solid #fff; margin-top: 5px; }
-        #player-health { width: 100%; height: 100%; background: #00ff00; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 15px; height: 15px; border: 2px solid #00ff00; border-radius: 50%; transform: translate(-50%, -50%); }
-        #instructions { position: absolute; top: 50%; width: 100%; text-align: center; color: white; background: rgba(0,0,0,0.7); padding: 20px; cursor: pointer; }
+        .bar-container { width: 250px; height: 18px; background: rgba(0,0,0,0.6); border: 2px solid #fff; border-radius: 10px; overflow: hidden; margin-bottom: 10px; }
+        #player-health { width: 100%; height: 100%; background: linear-gradient(90deg, #00ff00, #004400); transition: 0.2s; }
+        #enemy-ui { position: absolute; top: 20px; right: 20px; text-align: right; }
+        #enemy-health { width: 100%; height: 100%; background: linear-gradient(90deg, #ff0000, #440000); transition: 0.2s; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 12px; height: 12px; border: 2px solid #00ff00; border-radius: 50%; transform: translate(-50%, -50%); opacity: 0.7; }
+        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; cursor: pointer; }
+        #msg { position: absolute; top: 40%; width: 100%; text-align: center; color: red; font-size: 60px; font-weight: bold; display: none; text-shadow: 4px 4px #000; }
     </style>
 </head>
 <body>
 
+    <div id="overlay">
+        <h1 style="color: #ff0000; font-size: 4rem; margin-bottom: 10px;">RUFO 3D BATTLE</h1>
+        <p>BAŞLAMAQ ÜÇÜN KLİKLƏ</p>
+        <p style="font-size: 14px; color: #ccc;">(W,A,S,D: Hərəkət | MAUS: Baxış və Atəş | ESC: Kilidi aç)</p>
+    </div>
+
     <div id="ui">
-        <h2 style="color: #ff0000; margin: 0;">RUFO YT CLASS</h2>
-        <div class="bar-bg"><div id="player-health"></div></div>
+        <div style="font-weight: bold;">RUFO (SƏN)</div>
+        <div class="bar-container"><div id="player-health"></div></div>
+    </div>
+
+    <div id="enemy-ui">
+        <div style="color: white; font-weight: bold;">DÜŞMƏN BOSS (200 HP)</div>
+        <div class="bar-container"><div id="enemy-health"></div></div>
     </div>
 
     <div id="crosshair"></div>
-    <div id="instructions">
-        <h1>OYUNA BAŞLAMAQ ÜÇÜN KLİKLƏ</h1>
-        <p>(W,A,S,D - Hərəkət | MAUS - Baxış və Atəş | ESC - Çıxış)</p>
-    </div>
+    <div id="msg">OYUN BİTDİ</div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
@@ -36,100 +47,132 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // İşıq
+        // İşıqlandırma
         scene.add(new THREE.AmbientLight(0xffffff, 0.4));
-        const sun = new THREE.DirectionalLight(0xff0000, 0.8);
-        sun.position.set(5, 10, 5);
-        scene.add(sun);
+        const dirLight = new THREE.DirectionalLight(0xff0000, 1);
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
 
         // Arena
-        scene.add(new THREE.GridHelper(100, 50, 0xff0000, 0x222222));
+        const grid = new THREE.GridHelper(100, 50, 0xff0000, 0x222222);
+        scene.add(grid);
 
-        // Xarakter (FPS üçün görünməz, amma yerini bilmək üçün qrup)
-        const player = new THREE.Group();
-        scene.add(player);
-        player.position.y = 1.6; // Göz hündürlüyü
-
-        // Düşmən
-        const enemyGeo = new THREE.BoxGeometry(1, 2, 1);
-        const enemyMat = new THREE.MeshStandardMaterial({color: 0xff0000});
-        const enemy = new THREE.Mesh(enemyGeo, enemyMat);
-        enemy.position.set(0, 1, -10);
-        scene.add(enemy);
-
-        // Güllə Sistemi
-        const bullets = [];
-        function shoot() {
-            const b = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), new THREE.MeshBasicMaterial({color: 0xffff00}));
-            b.position.copy(player.position);
-            
-            const direction = new THREE.Vector3();
-            camera.getWorldDirection(direction);
-            b.userData.velocity = direction.multiplyScalar(1.2);
-            
-            scene.add(b);
-            bullets.push(b);
+        // Xarakter yaradan funksiya (Detallı 3D xarakter)
+        function createCharacter(skinColor, clothColor) {
+            const group = new THREE.Group();
+            // Bədən
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.9, 0.3), new THREE.MeshStandardMaterial({color: clothColor}));
+            body.position.y = 0.85;
+            group.add(body);
+            // Baş
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), new THREE.MeshStandardMaterial({color: skinColor}));
+            head.position.y = 1.5;
+            group.add(head);
+            // Əllər
+            const armL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.2), new THREE.MeshStandardMaterial({color: clothColor}));
+            armL.position.set(-0.45, 0.9, 0);
+            group.add(armL);
+            const armR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.2), new THREE.MeshStandardMaterial({color: clothColor}));
+            armR.position.set(0.45, 0.9, 0);
+            group.add(armR);
+            // Silah
+            const gun = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 0.6), new THREE.MeshStandardMaterial({color: 0x000000}));
+            gun.position.set(0.45, 0.8, -0.4);
+            group.add(gun);
+            return group;
         }
 
-        // MAUS KİLİDLƏMƏ SİSTEMİ (Pointer Lock)
-        const instructions = document.getElementById('instructions');
-        instructions.addEventListener('click', () => {
-            document.body.requestPointerLock();
-        });
+        const player = new THREE.Group();
+        scene.add(player);
+        player.position.set(0, 0, 5);
 
-        document.addEventListener('pointerlockchange', () => {
-            instructions.style.display = document.pointerLockElement === document.body ? 'none' : 'block';
-        });
+        const enemy = createCharacter(0xffdbac, 0xff0000);
+        enemy.position.set(0, 0, -10);
+        scene.add(enemy);
 
-        // Kamera İdarəsi (Mausla)
-        let pitch = 0, yaw = 0;
+        // Dəyişənlər
+        let playerHP = 100, enemyHP = 200;
+        let yaw = 0, pitch = 0;
+        const bullets = [];
+        const keys = {};
+
+        // Pointer Lock (Maus Kilidi)
+        const overlay = document.getElementById('overlay');
+        overlay.addEventListener('click', () => document.body.requestPointerLock());
+        document.addEventListener('pointerlockchange', () => overlay.style.display = document.pointerLockElement ? 'none' : 'flex');
+
         document.addEventListener('mousemove', (e) => {
-            if (document.pointerLockElement === document.body) {
+            if (document.pointerLockElement) {
                 yaw -= e.movementX * 0.002;
                 pitch -= e.movementY * 0.002;
-                pitch = Math.max(-Math.PI/2.5, Math.min(Math.PI/2.5, pitch)); // Yuxarı/aşağı limiti
+                pitch = Math.max(-Math.PI/3, Math.min(Math.PI/3, pitch));
             }
         });
 
+        // Atəş
         window.addEventListener('mousedown', () => {
-            if (document.pointerLockElement === document.body) shoot();
+            if (!document.pointerLockElement || playerHP <= 0) return;
+            const b = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), new THREE.MeshBasicMaterial({color: 0xffff00}));
+            b.position.copy(player.position).add(new THREE.Vector3(0, 1.4, 0));
+            const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+            b.userData.velocity = dir.multiplyScalar(1.2);
+            scene.add(b);
+            bullets.push(b);
         });
 
-        // Hərəkət
-        const keys = {};
         window.addEventListener('keydown', e => keys[e.code] = true);
         window.addEventListener('keyup', e => keys[e.code] = false);
 
-        let enemyHP = 100;
-
         function update() {
-            // Baxış bucağını tətbiq et
+            if (playerHP <= 0 || enemyHP <= 0) {
+                const msg = document.getElementById('msg');
+                msg.style.display = "block";
+                msg.innerText = enemyHP <= 0 ? "QƏLƏBƏ! BOSS ÖLDÜ" : "MƏĞLUBİYYƏT!";
+                return;
+            }
+
+            // Kamera və Baxış
             player.rotation.y = yaw;
             camera.rotation.set(pitch, yaw, 0, 'YXZ');
-            camera.position.copy(player.position);
+            camera.position.set(player.position.x, player.position.y + 1.6, player.position.z);
 
-            // Hərəkət mexanikası (Baxdığın tərəfə uyğun)
-            const speed = 0.15;
+            // Hərəkət
+            const speed = 0.12;
             const dirZ = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
             const dirX = new THREE.Vector3(1, 0, 0).applyQuaternion(player.quaternion);
-
             if (keys['KeyW']) player.position.add(dirZ.multiplyScalar(speed));
             if (keys['KeyS']) player.position.add(dirZ.multiplyScalar(-speed));
             if (keys['KeyA']) player.position.add(dirX.multiplyScalar(-speed));
             if (keys['KeyD']) player.position.add(dirX.multiplyScalar(speed));
 
-            // Güllə hərəkəti və vuruş
+            // Güllə Fizikası
             for (let i = bullets.length - 1; i >= 0; i--) {
-                let b = bullets[i];
+                const b = bullets[i];
                 b.position.add(b.userData.velocity);
-                
-                if (b.position.distanceTo(enemy.position) < 1.5) {
+                if (b.position.distanceTo(enemy.position.clone().add(new THREE.Vector3(0,1,0))) < 1.2) {
                     enemyHP -= 10;
+                    document.getElementById('enemy-health').style.width = (enemyHP / 200 * 100) + "%";
                     scene.remove(b);
                     bullets.splice(i, 1);
-                    enemy.material.emissive.setHex(0xffffff);
-                    setTimeout(() => enemy.material.emissive.setHex(0x000000), 50);
+                    enemy.children[0].material.emissive.setHex(0xffffff);
+                    setTimeout(() => enemy.children[0].material.emissive.setHex(0x000000), 50);
                 }
+            }
+
+            // Düşmən AI (Təqib və Hücum)
+            const dist = player.position.distanceTo(enemy.position);
+            if (dist > 1.8) {
+                const moveDir = player.position.clone().sub(enemy.position).normalize();
+                enemy.position.x += moveDir.x * 0.07;
+                enemy.position.z += moveDir.z * 0.07;
+                enemy.lookAt(player.position.x, 0, player.position.z);
+            } else {
+                // Düşmən sənə vurur
+                playerHP -= 0.3;
+                document.getElementById('player-health').style.width = playerHP + "%";
+                // Ekran qızarsın effekti üçün (sadə)
+                renderer.setClearColor(0x330000);
+                setTimeout(() => renderer.setClearColor(0x050505), 50);
             }
 
             renderer.render(scene, camera);
@@ -137,6 +180,11 @@
         }
 
         update();
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 </html>
