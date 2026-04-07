@@ -2,10 +2,9 @@
 <html lang="az">
 <head>
     <meta charset="UTF-8">
-    <title>Rufo City | Audi & Realistic World</title>
+    <title>Rufo City | Audi Drive</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Orbitron', sans-serif; }
-        canvas { display: block; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
         #ui { position: absolute; bottom: 30px; right: 30px; color: white; text-align: right; z-index: 100; }
         #speed { font-size: 70px; font-weight: 900; }
         #loading { 
@@ -13,15 +12,16 @@
             background: #111; color: white; display: flex; flex-direction: column;
             align-items: center; justify-content: center; z-index: 1000;
         }
-        .loader-bar { width: 200px; height: 4px; background: #333; margin-top: 10px; }
-        #progress { width: 0%; height: 100%; background: #ff0000; }
+        .bar { width: 200px; height: 5px; background: #333; margin-top: 10px; }
+        #prog { width: 0%; height: 100%; background: red; }
     </style>
 </head>
 <body>
 
     <div id="loading">
-        <div id="load-text">Resurslar Yüklənir...</div>
-        <div class="loader-bar"><div id="progress"></div></div>
+        <div id="status">Audi & Dünya Yüklənir...</div>
+        <div class="bar"><div id="prog"></div></div>
+        <p style="font-size: 12px; color: gray;">Böyük fayllar yüklənərkən ekran 10-20 saniyə qara qala bilər.</p>
     </div>
 
     <div id="ui">
@@ -36,30 +36,25 @@
 
     <script>
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 20000);
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 30000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.outputEncoding = THREE.sRGBEncoding;
         document.body.appendChild(renderer.domElement);
 
-        scene.add(new THREE.AmbientLight(0xffffff, 1.5));
-        const sun = new THREE.DirectionalLight(0xffffff, 1);
-        sun.position.set(100, 500, 100);
+        // İşığı kəskin artırdıq ki, qaranlıq qalmasın
+        scene.add(new THREE.AmbientLight(0xffffff, 2.0)); 
+        const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+        sun.position.set(500, 1000, 500);
         scene.add(sun);
 
-        // YÜKLƏMƏ MENECERİ (Xətaları idarə etmək üçün)
         const manager = new THREE.LoadingManager();
-        manager.onProgress = (url, itemsLoaded, itemsTotal) => {
-            document.getElementById('progress').style.width = (itemsLoaded / itemsTotal * 100) + '%';
+        manager.onProgress = (url, loaded, total) => {
+            document.getElementById('prog').style.width = (loaded / total * 100) + '%';
         };
         manager.onLoad = () => {
-            console.log("Bütün fayllar yükləndi!");
             document.getElementById('loading').style.display = 'none';
             animate();
-        };
-        manager.onError = (url) => {
-            console.log('Yüklənmə xətası (keçilir): ' + url);
-            // Bir fayl tapılmasa belə oyunu başlatmaq üçün onLoad-u məcburi çağırırıq
         };
 
         const gltfLoader = new THREE.GLTFLoader(manager);
@@ -69,8 +64,24 @@
         // 1. DÜNYANI YÜKLƏ (FBX)
         fbxLoader.load('Street environment_V01.FBX', function (object) {
             world = object;
-            world.scale.set(0.02, 0.02, 0.02); // Ölçünü bir az kiçiltdik (FBX çox böyük olur)
+            // Dünyanı çox kiçildirik ki, kameranın içində itməyək
+            world.scale.set(0.005, 0.005, 0.005); 
+            world.position.set(0, 0, 0);
+
+            world.traverse(function (child) {
+                if (child.isMesh) {
+                    // Tekstura xətası olsa belə binalar boz görünsün (qara qalmasın)
+                    if (!child.material.map) {
+                        child.material = new THREE.MeshStandardMaterial({color: 0x888888});
+                    }
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                }
+            });
             scene.add(world);
+        }, undefined, (err) => {
+            console.error("FBX Yüklənmədi, binalar yaradılır...");
+            createFallbackWorld(); // Əgər fayl tapılmasa, köhnə binaları yarat
         });
 
         // 2. AUDI YÜKLƏ (GLB)
@@ -81,6 +92,13 @@
             scene.add(playerCar);
         });
 
+        // Ehtiyat dünya (əgər FBX yüklənməsə oyun tam qaranlıq qalmasın)
+        function createFallbackWorld() {
+            const ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.MeshStandardMaterial({color: 0x333333}));
+            ground.rotation.x = -Math.PI / 2;
+            scene.add(ground);
+        }
+
         let speed = 0, angle = 0, targetAngle = 0;
         const keys = {};
         window.addEventListener('keydown', e => keys[e.code] = true);
@@ -90,6 +108,7 @@
             requestAnimationFrame(animate);
             if (!playerCar) return;
 
+            // Sürət idarəsi
             if (keys['KeyW']) speed = Math.min(speed + 0.02, (keys['ShiftLeft'] ? 3.5 : 1.8));
             else if (keys['KeyS']) speed = Math.max(speed - 0.04, -1);
             else speed *= 0.98;
@@ -104,7 +123,8 @@
             playerCar.position.z += Math.cos(angle) * speed;
             playerCar.rotation.y = angle + Math.PI;
 
-            const camOffset = new THREE.Vector3(0, 6, 18).applyQuaternion(playerCar.quaternion);
+            // Kamera takibi
+            const camOffset = new THREE.Vector3(0, 5, 15).applyQuaternion(playerCar.quaternion);
             camera.position.lerp(playerCar.position.clone().add(camOffset), 0.1);
             camera.lookAt(playerCar.position);
 
@@ -118,14 +138,14 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Təhlükəsizlik: 10 saniyə sonra hələ də açılmayıbsa, məcburi başlat
+        // Məcburi başlatma (15 saniyə sonra)
         setTimeout(() => {
             if(document.getElementById('loading').style.display !== 'none') {
-                console.warn("Yükləmə uzun çəkdi, məcburi başladılır...");
                 document.getElementById('loading').style.display = 'none';
+                if(!world) createFallbackWorld();
                 animate();
             }
-        }, 10000);
+        }, 15000);
     </script>
 </body>
 </html>
