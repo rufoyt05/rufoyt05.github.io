@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+    <meta charset="UTF-8">
+    <title>Zombi Sağ Qalma BRIGHT | Rufo YT CLASS</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #050505; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 20px; left: 20px; color: white; pointer-events: none; z-index: 10; }
+        .bar-container { width: 250px; height: 20px; background: rgba(255,255,255,0.1); border: 2px solid #ff0000; border-radius: 10px; overflow: hidden; }
+        #health-bar { width: 100%; height: 100%; background: linear-gradient(90deg, #ff0000, #990000); }
+        #score { font-size: 28px; font-weight: bold; color: #00ff00; text-shadow: 2px 2px #000; margin-top: 10px; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; border: 2px solid #0f0; border-radius: 50%; transform: translate(-50%, -50%); opacity: 0.5; }
+        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; cursor: pointer; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <h1 style="color: #ff0000; font-size: 3.5rem; text-shadow: 0 0 15px #f00;">ZOMBİ GECCƏSİ</h1>
+        <p>İşıqlar artırıldı - İndi onları görə bilərsən!</p>
+        <p style="background: #ff0000; padding: 12px 35px; border-radius: 5px; font-weight: bold; margin-top: 20px;">HÜCUMA BAŞLA</p>
+    </div>
+
+    <div id="ui">
+        <div style="font-weight: bold; letter-spacing: 1px;">SAĞLAMLIQ</div>
+        <div class="bar-container"><div id="health-bar"></div></div>
+        <div id="score">XAL: 0</div>
+    </div>
+
+    <div id="crosshair"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050508);
+        // Dumanı bir az azaltdım ki, uzaqdakı zombilər daha net görünsün
+        scene.fog = new THREE.FogExp2(0x050508, 0.04);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // --- İŞIQLANDIRMA YENİLƏNDİ ---
+        // 1. Ay işığı (Ümumi mühiti bir az aydınladır)
+        const ambient = new THREE.AmbientLight(0x4040ff, 0.4); 
+        scene.add(ambient);
+
+        // 2. Güclü Fənər (Daha geniş bucaq və parlaqlıq)
+        const flashLight = new THREE.SpotLight(0xffffff, 2.5, 60, 0.6, 0.2);
+        scene.add(flashLight);
+        scene.add(flashLight.target);
+
+        // ARENA
+        const floorGeo = new THREE.PlaneGeometry(300, 300);
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x151515 });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        scene.add(floor);
+        // Yer toru daha parlaq
+        scene.add(new THREE.GridHelper(300, 60, 0x333333, 0x222222));
+
+        // OYUNÇU
+        const player = new THREE.Group();
+        scene.add(player);
+
+        // ZOMBİ YARATMA (Daha görünən detallar)
+        function createZombie() {
+            const group = new THREE.Group();
+            
+            // Bədən - Emissive (Özündən yüngül parlama) əlavə edildi
+            const body = new THREE.Mesh(
+                new THREE.BoxGeometry(0.7, 1.2, 0.4), 
+                new THREE.MeshStandardMaterial({color: 0x2d4c1e, emissive: 0x112200, emissiveIntensity: 0.2})
+            );
+            body.position.y = 0.6;
+            group.add(body);
+
+            // Baş
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.45), new THREE.MeshStandardMaterial({color: 0x4d6c3e}));
+            head.position.y = 1.4;
+            group.add(head);
+
+            // Qırmızı Gözlər (Tam parlayan)
+            const eyeGeo = new THREE.SphereGeometry(0.06, 8, 8);
+            const eyeMat = new THREE.MeshBasicMaterial({color: 0xff0000});
+            const eL = new THREE.Mesh(eyeGeo, eyeMat); eL.position.set(-0.12, 1.45, -0.22);
+            const eR = new THREE.Mesh(eyeGeo, eyeMat); eR.position.set(0.12, 1.45, -0.22);
+            group.add(eL, eR);
+
+            // Qollar
+            const armGeo = new THREE.BoxGeometry(0.2, 0.2, 0.7);
+            const arm = new THREE.Mesh(armGeo, new THREE.MeshStandardMaterial({color: 0x2d4c1e}));
+            arm.position.set(0.4, 1.0, -0.3);
+            group.add(arm);
+
+            return group;
+        }
+
+        let health = 100, score = 0, yaw = 0, pitch = 0;
+        const bullets = [], zombies = [], keys = {};
+
+        // Kontrollar
+        document.getElementById('overlay').addEventListener('click', () => document.body.requestPointerLock());
+        document.addEventListener('pointerlockchange', () => {
+            document.getElementById('overlay').style.display = document.pointerLockElement ? 'none' : 'flex';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement) {
+                yaw -= e.movementX * 0.002;
+                pitch -= e.movementY * 0.002;
+                pitch = Math.max(-Math.PI/3, Math.min(Math.PI/3, pitch));
+            }
+        });
+
+        window.addEventListener('mousedown', () => {
+            if (!document.pointerLockElement || health <= 0) return;
+            const b = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), new THREE.MeshBasicMaterial({color: 0xffff00}));
+            b.position.copy(player.position).add(new THREE.Vector3(0, 1.5, 0));
+            const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+            b.userData.velocity = dir.multiplyScalar(1.6);
+            scene.add(b);
+            bullets.push(b);
+        });
+
+        function spawn() {
+            if (health <= 0) return;
+            const z = createZombie();
+            const angle = Math.random() * Math.PI * 2;
+            z.position.set(Math.cos(angle) * 35, 0, Math.sin(angle) * 35);
+            scene.add(z);
+            zombies.push(z);
+        }
+        setInterval(spawn, 1800);
+
+        window.addEventListener('keydown', e => keys[e.code] = true);
+        window.addEventListener('keyup', e => keys[e.code] = false);
+
+        function update() {
+            if (health <= 0) return;
+
+            player.rotation.y = yaw;
+            camera.rotation.set(pitch, yaw, 0, 'YXZ');
+            camera.position.set(player.position.x, 1.6, player.position.z);
+            
+            // Fənər hərəkəti
+            flashLight.position.copy(camera.position);
+            const target = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).add(camera.position);
+            flashLight.target.position.copy(target);
+
+            // Player Hərəkət
+            const s = 0.13;
+            const dZ = new THREE.Vector3(0,0,-1).applyQuaternion(player.quaternion);
+            const dX = new THREE.Vector3(1,0,0).applyQuaternion(player.quaternion);
+            if(keys['KeyW']) player.position.add(dZ.multiplyScalar(s));
+            if(keys['KeyS']) player.position.add(dZ.multiplyScalar(-s));
+            if(keys['KeyA']) player.position.add(dX.multiplyScalar(-s));
+            if(keys['KeyD']) player.position.add(dX.multiplyScalar(s));
+
+            // Güllələr
+            for(let i=bullets.length-1; i>=0; i--){
+                bullets[i].position.add(bullets[i].userData.velocity);
+                zombies.forEach((z, zi) => {
+                    if(bullets[i] && bullets[i].position.distanceTo(z.position.clone().add(new THREE.Vector3(0,1,0))) < 1.3){
+                        scene.remove(z); zombies.splice(zi,1);
+                        scene.remove(bullets[i]); bullets.splice(i,1);
+                        score += 10; document.getElementById('score').innerText = "XAL: " + score;
+                    }
+                });
+                if(bullets[i] && bullets[i].position.length() > 80){ scene.remove(bullets[i]); bullets.splice(i,1); }
+            }
+
+            // Zombi AI
+            zombies.forEach(z => {
+                const d = player.position.clone().sub(z.position).normalize();
+                z.position.x += d.x * 0.06;
+                z.position.z += d.z * 0.06;
+                z.lookAt(player.position.x, 0, player.position.z);
+                
+                if(z.position.distanceTo(player.position) < 1.5){
+                    health -= 0.4;
+                    document.getElementById('health-bar').style.width = Math.max(0, health) + "%";
+                    if(health <= 0) location.reload(); // Sadə ölüm
+                }
+            });
+
+            renderer.render(scene, camera);
+            requestAnimationFrame(update);
+        }
+        update();
+    </script>
+</body>
+</html>
