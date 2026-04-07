@@ -4,22 +4,29 @@
     <meta charset="UTF-8">
     <title>Rufo City | Audi & Realistic World</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: 'Orbitron', sans-serif; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Orbitron', sans-serif; }
         canvas { display: block; }
-        #ui { position: absolute; bottom: 30px; right: 30px; color: white; text-align: right; pointer-events: none; z-index: 100; }
-        #speed { font-size: 70px; font-weight: 900; font-style: italic; line-height: 1; text-shadow: 0 0 15px rgba(0,0,0,0.5); }
-        .unit { font-size: 20px; color: #ff0000; margin-left: 5px; font-weight: bold; }
-        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 20px; text-align: center; background: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; }
+        #ui { position: absolute; bottom: 30px; right: 30px; color: white; text-align: right; z-index: 100; }
+        #speed { font-size: 70px; font-weight: 900; }
+        #loading { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: #111; color: white; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 1000;
+        }
+        .loader-bar { width: 200px; height: 4px; background: #333; margin-top: 10px; }
+        #progress { width: 0%; height: 100%; background: #ff0000; }
     </style>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@900&display=swap" rel="stylesheet">
 </head>
 <body>
 
-    <div id="loading">Dünya və Audi Yüklənir...<br><span id="status" style="font-size: 14px;">Zəhmət olmasa gözləyin</span></div>
+    <div id="loading">
+        <div id="load-text">Resurslar Yüklənir...</div>
+        <div class="loader-bar"><div id="progress"></div></div>
+    </div>
 
     <div id="ui">
         <div id="speed">0</div>
-        <div class="unit">KM/H</div>
+        <div style="color:red">KM/H</div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -29,72 +36,51 @@
 
     <script>
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 10000);
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 20000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.outputEncoding = THREE.sRGBEncoding;
         document.body.appendChild(renderer.domElement);
 
-        scene.background = new THREE.Color(0x87CEEB);
-        scene.fog = new THREE.Fog(0x87CEEB, 500, 5000);
-
-        const ambient = new THREE.AmbientLight(0xffffff, 1.2);
-        scene.add(ambient);
-        const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-        sun.position.set(200, 500, 200);
+        scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+        const sun = new THREE.DirectionalLight(0xffffff, 1);
+        sun.position.set(100, 500, 100);
         scene.add(sun);
 
+        // YÜKLƏMƏ MENECERİ (Xətaları idarə etmək üçün)
+        const manager = new THREE.LoadingManager();
+        manager.onProgress = (url, itemsLoaded, itemsTotal) => {
+            document.getElementById('progress').style.width = (itemsLoaded / itemsTotal * 100) + '%';
+        };
+        manager.onLoad = () => {
+            console.log("Bütün fayllar yükləndi!");
+            document.getElementById('loading').style.display = 'none';
+            animate();
+        };
+        manager.onError = (url) => {
+            console.log('Yüklənmə xətası (keçilir): ' + url);
+            // Bir fayl tapılmasa belə oyunu başlatmaq üçün onLoad-u məcburi çağırırıq
+        };
+
+        const gltfLoader = new THREE.GLTFLoader(manager);
+        const fbxLoader = new THREE.FBXLoader(manager);
         let playerCar, world;
-        const gltfLoader = new THREE.GLTFLoader();
-        const fbxLoader = new THREE.FBXLoader();
 
         // 1. DÜNYANI YÜKLƏ (FBX)
         fbxLoader.load('Street environment_V01.FBX', function (object) {
             world = object;
-            // FBX modelləri çox böyük olur, miqyası kiçildirik
-            world.scale.set(0.05, 0.05, 0.05); 
-            world.position.set(0, 0, 0);
-            
-            world.traverse(function (child) {
-                if (child.isMesh) {
-                    child.castShadow = true;
-                    child.receiveShadow = true;
-                }
-            });
+            world.scale.set(0.02, 0.02, 0.02); // Ölçünü bir az kiçiltdik (FBX çox böyük olur)
             scene.add(world);
-            console.log("Dünya yükləndi");
-            checkAllLoaded();
         });
 
         // 2. AUDI YÜKLƏ (GLB)
         gltfLoader.load('audi.glb', function(gltf) {
             playerCar = gltf.scene;
-            
-            const box = new THREE.Box3().setFromObject(playerCar);
-            const size = box.getSize(new THREE.Vector3());
-            const center = box.getCenter(new THREE.Vector3());
-
-            playerCar.position.set(0, 0, 0);
-            const scaleFactor = 6 / size.z; 
-            playerCar.scale.set(scaleFactor, scaleFactor, scaleFactor);
-            
-            // Tərsliyi düzəltmək üçün
+            playerCar.scale.set(1.5, 1.5, 1.5);
             playerCar.rotation.y = Math.PI; 
-            
             scene.add(playerCar);
-            console.log("Audi yükləndi");
-            checkAllLoaded();
         });
 
-        function checkAllLoaded() {
-            if (playerCar && world) {
-                document.getElementById('loading').style.display = 'none';
-                animate();
-            }
-        }
-
-        // İdarəetmə
         let speed = 0, angle = 0, targetAngle = 0;
         const keys = {};
         window.addEventListener('keydown', e => keys[e.code] = true);
@@ -104,28 +90,25 @@
             requestAnimationFrame(animate);
             if (!playerCar) return;
 
-            let isTurbo = keys['ShiftLeft'] || keys['ShiftRight'];
-            
-            if (keys['KeyW']) speed = Math.min(speed + 0.015, isTurbo ? 3.0 : 1.5);
-            else if (keys['KeyS']) speed = Math.max(speed - 0.03, -0.8);
-            else speed *= 0.985;
+            if (keys['KeyW']) speed = Math.min(speed + 0.02, (keys['ShiftLeft'] ? 3.5 : 1.8));
+            else if (keys['KeyS']) speed = Math.max(speed - 0.04, -1);
+            else speed *= 0.98;
 
-            if (Math.abs(speed) > 0.05) {
+            if (Math.abs(speed) > 0.1) {
                 if (keys['KeyA']) targetAngle -= 0.04;
                 if (keys['KeyD']) targetAngle += 0.04;
             }
-            angle += (targetAngle - angle) * 0.12;
+            angle += (targetAngle - angle) * 0.1;
 
             playerCar.position.x += Math.sin(angle) * speed;
             playerCar.position.z += Math.cos(angle) * speed;
             playerCar.rotation.y = angle + Math.PI;
 
-            // Kamera İzləmə
-            const camOffset = new THREE.Vector3(0, 5, 15).applyQuaternion(playerCar.quaternion);
+            const camOffset = new THREE.Vector3(0, 6, 18).applyQuaternion(playerCar.quaternion);
             camera.position.lerp(playerCar.position.clone().add(camOffset), 0.1);
-            camera.lookAt(playerCar.position.x, 2, playerCar.position.z);
+            camera.lookAt(playerCar.position);
 
-            document.getElementById('speed').innerText = Math.floor(Math.abs(speed) * 140);
+            document.getElementById('speed').innerText = Math.floor(Math.abs(speed) * 100);
             renderer.render(scene, camera);
         }
 
@@ -134,6 +117,15 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
+
+        // Təhlükəsizlik: 10 saniyə sonra hələ də açılmayıbsa, məcburi başlat
+        setTimeout(() => {
+            if(document.getElementById('loading').style.display !== 'none') {
+                console.warn("Yükləmə uzun çəkdi, məcburi başladılır...");
+                document.getElementById('loading').style.display = 'none';
+                animate();
+            }
+        }, 10000);
     </script>
 </body>
 </html>
