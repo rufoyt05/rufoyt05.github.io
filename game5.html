@@ -2,20 +2,22 @@
 <html lang="az">
 <head>
     <meta charset="UTF-8">
-    <title>Rufo City | Audi Edition</title>
+    <title>Rufo City | Audi GLB Real Drive</title>
     <style>
         body { margin: 0; overflow: hidden; background: #87CEEB; font-family: 'Orbitron', sans-serif; }
         canvas { display: block; }
         #ui { position: absolute; bottom: 30px; right: 30px; color: white; text-align: right; pointer-events: none; z-index: 100; }
         #speed { font-size: 70px; font-weight: 900; font-style: italic; line-height: 1; text-shadow: 0 0 15px rgba(0,0,0,0.5); }
         .unit { font-size: 20px; color: #ff0000; margin-left: 5px; font-weight: bold; }
-        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 24px; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 24px; text-align: center; }
+        #hint { position: absolute; bottom: 30px; left: 30px; color: rgba(255,255,255,0.7); font-size: 14px; text-transform: uppercase; }
     </style>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@900&amp;display=swap" rel="stylesheet">
 </head>
 <body>
 
-    <div id="loading">Audi Yüklənir...</div>
+    <div id="loading">Audi Yüklənir...<br><small style="font-size: 14px;">(Əgər çox çəksə, fayl adını yoxlayın)</small></div>
+    <div id="hint">W, A, S, D - SÜR | SHIFT - TURBO</div>
 
     <div id="ui">
         <div id="speed">0</div>
@@ -34,54 +36,78 @@
         renderer.outputEncoding = THREE.sRGBEncoding;
         document.body.appendChild(renderer.domElement);
 
-        // İşıqlandırma (Realistik)
-        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-        const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-        sun.position.set(100, 200, 100);
-        scene.add(sun);
+        // Atmosfer
         scene.background = new THREE.Color(0x87CEEB);
         scene.fog = new THREE.Fog(0x87CEEB, 200, 2000);
 
-        // Boz Yol
+        // İşıqlandırma
+        const ambient = new THREE.AmbientLight(0xffffff, 1.0);
+        scene.add(ambient);
+        const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+        sun.position.set(100, 200, 100);
+        scene.add(sun);
+
+        // Yol (Boz Asfalt)
         const roadGeo = new THREE.PlaneGeometry(45, 10000);
         const roadMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 });
         const road = new THREE.Mesh(roadGeo, roadMat);
         road.rotation.x = -Math.PI / 2;
         scene.add(road);
 
-        // Şəhər Binaları
+        // Binalar
         const buildings = [];
         for(let i=0; i<300; i++) {
-            const h = 30 + Math.random() * 100;
+            const h = 30 + Math.random() * 120;
             const b = new THREE.Mesh(
                 new THREE.BoxGeometry(20, h, 20), 
                 new THREE.MeshStandardMaterial({ color: 0xdddddd })
             );
-            let x = (Math.random() > 0.5 ? 1 : -1) * (40 + Math.random() * 60);
-            let z = -(Math.random() * 4000);
+            let x = (Math.random() > 0.5 ? 1 : -1) * (45 + Math.random() * 60);
+            let z = -(Math.random() * 5000);
             b.position.set(x, h/2, z);
             scene.add(b);
             buildings.push(new THREE.Box3().setFromObject(b));
         }
 
-        // --- AUDI GLB YÜKLƏMƏ ---
+        // --- MODEL YÜKLƏMƏ ---
         let playerCar;
         const loader = new THREE.GLTFLoader();
 
         loader.load('audi.glb', function(gltf) {
             playerCar = gltf.scene;
-            
-            // Maşın çox böyükdürsə bu rəqəmi kiçilt (məs: 0.5), kiçikdirsə böyüt (məs: 2.5)
-            playerCar.scale.set(1.5, 1.5, 1.5); 
-            
+
+            // Görünməzlik problemini həll etmək üçün material düzəlişi
+            playerCar.traverse((node) => {
+                if (node.isMesh) {
+                    node.castShadow = true;
+                    node.receiveShadow = true;
+                }
+            });
+
+            // Avtomatik Ölçüləndirmə (Maşın çox kiçik və ya böyükdürsə)
+            const box = new THREE.Box3().setFromObject(playerCar);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+
+            // Mərkəzləşdirmə
+            playerCar.position.x += (playerCar.position.x - center.x);
+            playerCar.position.y += (playerCar.position.y - box.min.y); 
+            playerCar.position.z += (playerCar.position.z - center.z);
+
+            // Standart oyun ölçüsü (Z oxu üzrə 5 vahid)
+            const scaleFactor = 5 / size.z;
+            playerCar.scale.set(scaleFactor, scaleFactor, scaleFactor);
+
             scene.add(playerCar);
             document.getElementById('loading').style.display = 'none';
-        }, undefined, function(error) {
-            console.error('Model yüklənmədi:', error);
-            document.getElementById('loading').innerText = "Fayl tapılmadı (audi.glb)";
+        }, 
+        (xhr) => { console.log((xhr.loaded / xhr.total * 100) + '% yükləndi'); },
+        (error) => {
+            console.error('Xəta:', error);
+            document.getElementById('loading').innerText = "audi.glb tapılmadı!";
         });
 
-        // İdarəetmə
+        // Hərəkət Dəyişənləri
         let speed = 0, angle = 0, targetAngle = 0;
         const keys = {};
         window.addEventListener('keydown', e => keys[e.code] = true);
@@ -91,24 +117,24 @@
             requestAnimationFrame(animate);
             if (!playerCar) return;
 
-            let isTurbo = keys['ShiftLeft'];
+            let isTurbo = keys['ShiftLeft'] || keys['ShiftRight'];
             
-            // Tənzimlənmiş Sürət (W və S)
-            if (keys['KeyW']) speed = Math.min(speed + 0.015, isTurbo ? 2.5 : 1.5);
-            else if (keys['KeyS']) speed = Math.max(speed - 0.03, -0.6);
+            // Sürət tənzimləməsi (W - İrəli, S - Geri)
+            if (keys['KeyW']) speed = Math.min(speed + 0.012, isTurbo ? 2.5 : 1.4);
+            else if (keys['KeyS']) speed = Math.max(speed - 0.025, -0.6);
             else speed *= 0.985;
 
-            // Dönmə (A və D)
+            // Sükan (A - Sol, D - Sağ)
             if (Math.abs(speed) > 0.05) {
-                if (keys['KeyA']) targetAngle += 0.035;
-                if (keys['KeyD']) targetAngle -= 0.035;
+                if (keys['KeyA']) targetAngle += 0.038;
+                if (keys['KeyD']) targetAngle -= 0.038;
             }
-            angle += (targetAngle - angle) * 0.1;
+            angle += (targetAngle - angle) * 0.12;
 
+            // Yeni mövqe və toqquşma yoxlanışı
             const nextX = playerCar.position.x + Math.sin(angle) * speed;
             const nextZ = playerCar.position.z + Math.cos(angle) * speed;
 
-            // Toqquşma yoxlanışı
             const carBox = new THREE.Box3().setFromCenterAndSize(
                 new THREE.Vector3(nextX, 1, nextZ), 
                 new THREE.Vector3(2.5, 1, 5)
@@ -122,17 +148,19 @@
             if(!hit) {
                 playerCar.position.set(nextX, 0, nextZ);
             } else {
-                speed = -speed * 0.3;
+                speed = -speed * 0.3; // Toqquşma anında sıçrayış
             }
 
             playerCar.rotation.y = angle;
 
-            // Kamera İzləmə
-            const camOffset = new THREE.Vector3(0, 4, 12).applyQuaternion(playerCar.quaternion);
+            // Kamera (Maşını izləmə)
+            const camOffset = new THREE.Vector3(0, 4.5, 13).applyQuaternion(playerCar.quaternion);
             camera.position.lerp(playerCar.position.clone().add(camOffset), 0.1);
-            camera.lookAt(playerCar.position);
+            camera.lookAt(playerCar.position.x, 1, playerCar.position.z);
 
-            document.getElementById('speed').innerText = Math.floor(Math.abs(speed) * 120);
+            // Sürət göstəricisi
+            document.getElementById('speed').innerText = Math.floor(Math.abs(speed) * 130);
+            
             renderer.render(scene, camera);
         }
         animate();
