@@ -3,159 +3,175 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rufo YT Games Hub | Oyun Portalı</title>
+    <title>Rufo Games | Oyun Portalı</title>
     <style>
-        /* Ümumi Stil */
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background-color: #0a0a0a; 
-            color: white; 
-            margin: 0; 
-            padding: 0; 
-            overflow-x: hidden;
+        :root {
+            --primary: #ff0000;
+            --dark: #0a0a0a;
+            --card-bg: #1a1a1a;
         }
 
-        /* Header */
-        header { 
-            background: linear-gradient(180deg, #1a1a1a 0%, #000 100%); 
-            padding: 40px 20px; 
-            text-align: center; 
-            border-bottom: 4px solid #ff0000;
-            box-shadow: 0 5px 20px rgba(255, 0, 0, 0.3);
+        body {
+            margin: 0;
+            background-color: var(--dark);
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
-        header h1 { margin: 0; font-size: 3rem; letter-spacing: 3px; color: #ff0000; text-transform: uppercase; }
-        header p { color: #888; font-size: 1.1rem; margin-top: 10px; }
+        header {
+            width: 100%;
+            padding: 40px 0;
+            text-align: center;
+            background: linear-gradient(to bottom, #220000, var(--dark));
+            border-bottom: 2px solid var(--primary);
+        }
 
-        /* Geri Düyməsi */
-        .back-btn { 
-            position: absolute; 
-            top: 20px; 
-            left: 20px; 
-            color: #fff; 
-            text-decoration: none; 
-            background: #ff0000; 
-            padding: 8px 18px; 
-            border-radius: 5px; 
+        h1 {
+            font-size: 3rem;
+            margin: 0;
+            letter-spacing: 5px;
+            text-transform: uppercase;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            max-width: 1200px;
+            padding: 50px 20px;
+            width: 100%;
+        }
+
+        .game-card {
+            background: var(--card-bg);
+            border-radius: 15px;
+            overflow: hidden;
+            transition: transform 0.3s, box-shadow 0.3s;
+            border: 1px solid #333;
+            text-decoration: none;
+            color: white;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .game-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 10px 30px rgba(255, 0, 0, 0.3);
+            border-color: var(--primary);
+        }
+
+        .game-img {
+            width: 100%;
+            height: 180px;
+            background-size: cover;
+            background-position: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 50px;
+        }
+
+        .info {
+            padding: 20px;
+            text-align: center;
+        }
+
+        .info h2 {
+            margin: 0 0 10px 0;
+            color: var(--primary);
+        }
+
+        .info p {
+            font-size: 14px;
+            color: #ccc;
+            line-height: 1.5;
+        }
+
+        .btn {
+            background: var(--primary);
+            color: white;
+            padding: 10px 0;
+            text-align: center;
             font-weight: bold;
-            transition: 0.3s;
-        }
-        .back-btn:hover { background: #fff; color: #ff0000; }
-
-        /* Oyunlar Konteyneri */
-        .games-grid { 
-            max-width: 1100px; 
-            margin: 50px auto; 
-            padding: 20px; 
-            display: grid; 
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
-            gap: 30px; 
+            text-transform: uppercase;
+            margin-top: auto;
         }
 
-        /* Oyun Kartı */
-        .game-card { 
-            background: #151515; 
-            border: 2px solid #222; 
-            border-radius: 20px; 
-            overflow: hidden; 
-            transition: 0.4s; 
-            position: relative;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        /* Oyun Rəngləri və İkonlar */
+        .g1 { background: linear-gradient(45deg, #1e3c72, #2a5298); }
+        .g2 { background: linear-gradient(45deg, #5a3f37, #2c7744); }
+        .g3 { background: linear-gradient(45deg, #8e2de2, #4a00e0); }
+        .g4 { background: linear-gradient(45deg, #f12711, #f5af19); }
+        .g5 { background: linear-gradient(45deg, #333, #777); }
+
+        footer {
+            margin-top: 50px;
+            padding: 20px;
+            color: #555;
+            font-size: 12px;
         }
-
-        .game-card:hover { 
-            transform: translateY(-15px); 
-            border-color: #ff0000; 
-            box-shadow: 0 15px 40px rgba(255, 0, 0, 0.2); 
-        }
-
-        /* Oyun Şəkli/Ikonu */
-        .game-thumbnail { 
-            width: 100%; 
-            height: 180px; 
-            background: linear-gradient(45deg, #111, #222); 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            font-size: 5rem;
-            border-bottom: 2px solid #222;
-        }
-
-        /* Oyun Məlumatı */
-        .game-info { padding: 20px; text-align: center; }
-        .game-info h3 { margin: 0 0 10px 0; font-size: 1.5rem; color: #fff; }
-        .game-info p { color: #aaa; font-size: 0.95rem; margin-bottom: 20px; line-height: 1.4; }
-
-        /* Oyna Düyməsi */
-        .play-now { 
-            display: inline-block; 
-            background: #ff0000; 
-            color: white; 
-            padding: 12px 35px; 
-            text-decoration: none; 
-            border-radius: 30px; 
-            font-weight: bold; 
-            text-transform: uppercase; 
-            transition: 0.3s;
-            box-shadow: 0 5px 15px rgba(255, 0, 0, 0.3);
-        }
-
-        .play-now:hover { 
-            background: #fff; 
-            color: #ff0000; 
-            transform: scale(1.05); 
-        }
-
-        /* Tezliklə Etiketi */
-        .coming-soon { opacity: 0.6; filter: grayscale(1); pointer-events: none; }
-        .badge { position: absolute; top: 10px; right: 10px; background: orange; color: black; padding: 5px 10px; border-radius: 5px; font-weight: bold; font-size: 12px; }
-
-        footer { text-align: center; padding: 40px; color: #444; border-top: 1px solid #111; margin-top: 50px; }
     </style>
 </head>
 <body>
 
     <header>
-        <a href="index.html" class="back-btn">← SAYTA QAYIT</a>
-        <h1>RUFO YT GAMES</h1>
-        <p>Proqramlaşdırdığım 3D Oyunlar Dünyasına Xoş Gəldin</p>
+        <h1>RUFO GAMES</h1>
+        <p>Ən yaxşı HTML5 oyunlar bir arada</p>
     </header>
 
-    <div class="games-grid">
-
-        <div class="game-card">
-            <div class="game-thumbnail">🔫</div>
-            <div class="game-info">
-                <h3>3D Shooter Pro</h3>
-                <p>Boss düşməni məğlub etmək üçün nişan al və atəş aç. Maus idarəetməsi ilə tam FPS təcrübəsi!</p>
-                <a href="game1.html" class="play-now">Oyna</a>
+    <div class="container">
+        
+        <a href="game1.html" class="game-card">
+            <div class="game-img g1">🧱</div>
+            <div class="info">
+                <h2>Brick Breaker</h2>
+                <p>Klassik kərpic sındırma oyunu. Topu düşürmə və bütün blokları təmizlə!</p>
             </div>
-        </div>
+            <div class="btn">Oyna</div>
+        </a>
 
-        <div class="game-card">
-            <div class="game-thumbnail">🏃‍♂️</div>
-            <div class="game-info">
-                <h3>Neon Parkour 3D</h3>
-                <p>Maneələri aşaraq ən hündür nöqtəyə çat. Sürət və çeviklik tələb edən macəra.</p>
-                <a href="game2.html" class="play-now">Tezliklə</a>
-                <div class="badge">YENİ</div>
+        <a href="game2.html" class="game-card">
+            <div class="game-img g2">🦕</div>
+            <div class="info">
+                <h2>Dino Run</h2>
+                <p>Maneələri aşaraq ən yüksək xal toplamağa çalış. Sürət getdikcə artır!</p>
             </div>
-        </div>
+            <div class="btn">Oyna</div>
+        </a>
 
-        <div class="game-card coming-soon">
-            <div class="game-thumbnail">🏎️</div>
-            <div class="game-info">
-                <h3>Rufo Racing</h3>
-                <p>Gecə şəhərində sürət yarışı. Öz maşınını modifikasiya et və qalib ol.</p>
-                <a href="#" class="play-now">Hazırlanır...</a>
+        <a href="game3.html" class="game-card">
+            <div class="game-img g3">🔫</div>
+            <div class="info">
+                <h2>Shooter Pro</h2>
+                <p>Hədəfləri vur və düşmənlərdən qorun. Sürətli refleks tələb olunur.</p>
             </div>
-        </div>
+            <div class="btn">Oyna</div>
+        </a>
+
+        <a href="game4.html" class="game-card">
+            <div class="game-img g4">🐍</div>
+            <div class="info">
+                <h2>Classic Snake</h2>
+                <p>Əfsanəvi ilan oyunu. Yeməkləri ye və öz quyruğuna dəymə!</p>
+            </div>
+            <div class="btn">Oyna</div>
+        </a>
+
+        <a href="game5.html" class="game-card">
+            <div class="game-img g5">🏎️</div>
+            <div class="info">
+                <h2>Audi City Drive</h2>
+                <p>Realistik Audi GLB modeli ilə şəhərdə gəzinti. Shift ilə turbodan istifadə et!</p>
+            </div>
+            <div class="btn">Oyna</div>
+        </a>
 
     </div>
 
-    <footer>
-        <p>&copy; 2026 Rufo YT CLASS Game Studio. Bütün hüquqlar qorunur.</p>
-    </footer>
+    <footer>&copy; 2026 Rufo Developer | Bütün hüquqlar qorunur</footer>
 
 </body>
 </html>
