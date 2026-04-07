@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+    <meta charset="UTF-8">
+    <title>Space War 3D | Rufo YT CLASS</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 20px; left: 20px; color: white; pointer-events: none; z-index: 10; }
+        #score { font-size: 30px; font-weight: bold; color: #00fbff; text-shadow: 0 0 10px #00fbff; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 30px; height: 30px; border: 2px solid #00fbff; transform: translate(-50%, -50%) rotate(45deg); opacity: 0.6; }
+        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <h1 style="color: #00fbff; font-size: 3.5rem; text-transform: uppercase;">Space War 3D</h1>
+        <p>Asteroidləri məhv et və qalaktikanı qoru!</p>
+        <p style="border: 2px solid #00fbff; padding: 10px 30px; border-radius: 50px; margin-top: 20px;">MÜHARİBƏYƏ BAŞLA</p>
+    </div>
+
+    <div id="ui">
+        <div id="score">XAL: 0</div>
+        <p style="color: #aaa; font-size: 14px;">W,A,S,D - Hərəkət | MAUS - Nişan al və Atəş</p>
+    </div>
+
+    <div id="crosshair"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Ulduzlu Fon (Space Background)
+        const starGeo = new THREE.BufferGeometry();
+        const starCount = 5000;
+        const posArray = new Float32Array(starCount * 3);
+        for(let i=0; i<starCount * 3; i++) posArray[i] = (Math.random() - 0.5) * 1000;
+        starGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const starMat = new THREE.PointsMaterial({ size: 0.7, color: 0xffffff });
+        const starMesh = new THREE.Points(starGeo, starMat);
+        scene.add(starMesh);
+
+        // İşıq
+        const light = new THREE.PointLight(0x00fbff, 2, 100);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+
+        // Oyunçu Gəmisi (Sadə 3D model)
+        const ship = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.ConeGeometry(0.5, 2, 8), new THREE.MeshStandardMaterial({color: 0x555555}));
+        body.rotation.x = Math.PI / 2;
+        ship.add(body);
+        scene.add(ship);
+
+        // Dəyişənlər
+        let score = 0, yaw = 0, pitch = 0;
+        const bullets = [], asteroids = [], keys = {};
+
+        // Pointer Lock
+        document.getElementById('overlay').addEventListener('click', () => document.body.requestPointerLock());
+        document.addEventListener('pointerlockchange', () => {
+            document.getElementById('overlay').style.display = document.pointerLockElement ? 'none' : 'flex';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement) {
+                yaw -= e.movementX * 0.002;
+                pitch -= e.movementY * 0.002;
+            }
+        });
+
+        // Atəş
+        window.addEventListener('mousedown', () => {
+            if (!document.pointerLockElement) return;
+            const b = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), new THREE.MeshBasicMaterial({color: 0xff0000}));
+            b.position.copy(ship.position);
+            const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(ship.quaternion);
+            b.userData.velocity = dir.multiplyScalar(2);
+            scene.add(b);
+            bullets.push(b);
+        });
+
+        // Asteroid Yaratma
+        function spawnAsteroid() {
+            const size = Math.random() * 2 + 0.5;
+            const a = new THREE.Mesh(
+                new THREE.IcosahedronGeometry(size, 1),
+                new THREE.MeshStandardMaterial({color: 0x888888, flatShading: true})
+            );
+            const dist = 60;
+            const angle1 = Math.random() * Math.PI * 2;
+            const angle2 = Math.random() * Math.PI * 2;
+            a.position.set(
+                Math.cos(angle1) * dist,
+                Math.sin(angle2) * dist,
+                (Math.random() - 0.5) * 100
+            );
+            a.userData.velocity = ship.position.clone().sub(a.position).normalize().multiplyScalar(0.2);
+            scene.add(a);
+            asteroids.push(a);
+        }
+        setInterval(spawnAsteroid, 1000);
+
+        window.addEventListener('keydown', e => keys[e.code] = true);
+        window.addEventListener('keyup', e => keys[e.code] = false);
+
+        function update() {
+            // Gəmi hərəkəti və Kamera
+            ship.rotation.set(pitch, yaw, 0, 'YXZ');
+            camera.position.copy(ship.position).add(new THREE.Vector3(0, 2, 10).applyQuaternion(ship.quaternion));
+            camera.lookAt(ship.position);
+            light.position.copy(ship.position);
+
+            const speed = 0.2;
+            const dirZ = new THREE.Vector3(0, 0, -1).applyQuaternion(ship.quaternion);
+            const dirX = new THREE.Vector3(1, 0, 0).applyQuaternion(ship.quaternion);
+            if(keys['KeyW']) ship.position.add(dirZ.multiplyScalar(speed));
+            if(keys['KeyS']) ship.position.add(dirZ.multiplyScalar(-speed));
+            if(keys['KeyA']) ship.position.add(dirX.multiplyScalar(-speed));
+            if(keys['KeyD']) ship.position.add(dirX.multiplyScalar(speed));
+
+            // Güllə Fizikası
+            for(let i=bullets.length-1; i>=0; i--){
+                bullets[i].position.add(bullets[i].userData.velocity);
+                asteroids.forEach((a, ai) => {
+                    if(bullets[i] && bullets[i].position.distanceTo(a.position) < 2){
+                        scene.remove(a); asteroids.splice(ai, 1);
+                        scene.remove(bullets[i]); bullets.splice(i, 1);
+                        score += 50; document.getElementById('score').innerText = "XAL: " + score;
+                    }
+                });
+                if(bullets[i] && bullets[i].position.length() > 200){ scene.remove(bullets[i]); bullets.splice(i, 1); }
+            }
+
+            // Asteroid Fizikası
+            asteroids.forEach(a => {
+                a.position.add(a.userData.velocity);
+                a.rotation.x += 0.01; a.rotation.y += 0.01;
+                if(a.position.distanceTo(ship.position) < 2) {
+                    score = Math.max(0, score - 5);
+                    document.getElementById('score').innerText = "XAL: " + score;
+                }
+            });
+
+            renderer.render(scene, camera);
+            requestAnimationFrame(update);
+        }
+        update();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
