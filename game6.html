@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+    <meta charset="UTF-8">
+    <title>Minecraft & Parkour Full | Fixed</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; }
+        
+        #menu {
+            position: absolute; width: 100%; height: 100%;
+            background: #1a1a1a; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 100;
+        }
+        .btn {
+            width: 250px; padding: 15px; margin: 10px;
+            background: #44aa44; color: white; border: 3px solid #226622;
+            font-size: 20px; font-weight: bold; cursor: pointer; text-align: center;
+            transition: 0.2s;
+        }
+        .btn:hover { background: #55cc55; transform: scale(1.05); }
+        
+        #crosshair {
+            position: absolute; top: 50%; left: 50%;
+            width: 15px; height: 15px; border: 2px solid white;
+            transform: translate(-50%, -50%); pointer-events: none; z-index: 10; display: none;
+        }
+
+        #inventory {
+            position: absolute; bottom: 20px; left: 50%;
+            transform: translateX(-50%); display: none; gap: 8px;
+            background: rgba(0,0,0,0.85); padding: 10px; border-radius: 12px;
+        }
+        .slot { 
+            width: 45px; height: 45px; border: 2px solid #666; 
+            display: flex; justify-content: center; align-items: center;
+        }
+        .slot.active { border-color: #00ffff; background: rgba(0,255,255,0.2); box-shadow: 0 0 10px #00ffff; }
+        .preview { width: 30px; height: 30px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+    <div id="menu">
+        <h1 style="color: white; margin-bottom: 30px;">REJİM SEÇİN</h1>
+        <div class="btn" onclick="startGame('world')">SADƏ DÜNYA</div>
+        <div class="btn" onclick="startGame('parkour')" style="background: #aa4444; border-color: #662222;">PARKUR</div>
+    </div>
+
+    <div id="crosshair"></div>
+
+    <div id="inventory">
+        <div class="slot active" id="slot1"><div class="preview" style="background: #44aa44;"></div></div>
+        <div class="slot" id="slot2"><div class="preview" style="background: #8B4513;"></div></div>
+        <div class="slot" id="slot3"><div class="preview" style="background: #808080;"></div></div>
+        <div class="slot" id="slot4"><div class="preview" style="background: #ffd700;"></div></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const sun = new THREE.DirectionalLight(0xffffff, 0.6);
+        sun.position.set(10, 50, 10);
+        scene.add(sun);
+
+        let blocks = [];
+        let keys = {};
+        let velocity = new THREE.Vector3();
+        let canJump = false;
+        let yaw = 0, pitch = 0;
+        let gameActive = false;
+        let spawnPos = new THREE.Vector3(0, 5, 0);
+
+        // Blok Tipləri
+        let selectedColor = 0x44aa44;
+        const blockMap = { 'Digit1': 0x44aa44, 'Digit2': 0x8B4513, 'Digit3': 0x808080, 'Digit4': 0xffd700 };
+
+        const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+
+        function createBlock(x, y, z, color) {
+            const mat = new THREE.MeshStandardMaterial({ color: color });
+            const mesh = new THREE.Mesh(boxGeo, mat);
+            mesh.position.set(x, y + 0.5, z);
+            scene.add(mesh);
+            blocks.push(mesh);
+        }
+
+        function startGame(mode) {
+            document.getElementById('menu').style.display = 'none';
+            document.getElementById('crosshair').style.display = 'block';
+            document.getElementById('inventory').style.display = 'flex';
+            gameActive = true;
+            document.body.requestPointerLock();
+
+            if (mode === 'world') {
+                scene.background = new THREE.Color(0x87CEEB);
+                spawnPos.set(0, 3, 5);
+                for (let x = -15; x <= 15; x++) {
+                    for (let z = -15; z <= 15; z++) createBlock(x, 0, z, 0x44aa44);
+                }
+            } else {
+                scene.background = new THREE.Color(0x0a0a0a);
+                scene.fog = new THREE.Fog(0x0a0a0a, 1, 60);
+                spawnPos.set(0, 3, 0);
+                createBlock(0, 0, 0, 0xaa4444); // Start platform
+                for (let i = 1; i < 30; i++) {
+                    createBlock(Math.random()*4-2, i, -i * 4, Math.random() * 0xffffff);
+                }
+            }
+            camera.position.copy(spawnPos);
+            animate();
+        }
+
+        function checkCollision(nextPos) {
+            const playerBox = new THREE.Box3().setFromCenterAndSize(nextPos, new THREE.Vector3(0.6, 1.8, 0.6));
+            for (let b of blocks) {
+                const blockBox = new THREE.Box3().setFromObject(b);
+                if (playerBox.intersectsBox(blockBox)) return true;
+            }
+            return false;
+        }
+
+        // --- BLOK QOYMA VƏ SİLMƏ ---
+        document.addEventListener('mousedown', (e) => {
+            if (document.pointerLockElement && gameActive) {
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                const intersects = raycaster.intersectObjects(blocks);
+
+                if (intersects.length > 0) {
+                    const intersect = intersects[0];
+                    if (e.button === 0) { // Sol Klik: Qoy
+                        const pos = intersect.object.position.clone().add(intersect.face.normal);
+                        const newBlockBox = new THREE.Box3().setFromCenterAndSize(pos, new THREE.Vector3(1, 1, 1));
+                        const playerBox = new THREE.Box3().setFromCenterAndSize(camera.position, new THREE.Vector3(0.6, 1.8, 0.6));
+                        
+                        if (!newBlockBox.intersectsBox(playerBox)) {
+                            createBlock(pos.x, pos.y - 0.5, pos.z, selectedColor);
+                        }
+                    } else if (e.button === 2) { // Sağ Klik: Sil
+                        // Yeri silməyə icazə vermə (y > 0.6 yoxlanışı)
+                        if (intersect.object.position.y > 0.6) {
+                            scene.remove(intersect.object);
+                            blocks = blocks.filter(b => b !== intersect.object);
+                        }
+                    }
+                }
+            } else if (!gameActive) {
+                // Menyu bağlandıqdan sonra kilidləmə üçün
+            }
+        });
+
+        document.addEventListener('contextmenu', e => e.preventDefault());
+
+        document.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement) {
+                yaw -= e.movementX * 0.002;
+                pitch -= e.movementY * 0.002;
+                pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
+                camera.rotation.set(pitch, yaw, 0, 'YXZ');
+            }
+        });
+
+        window.addEventListener('keydown', e => {
+            if (!gameActive) return;
+            keys[e.code] = true;
+
+            // Blok Seçimi (1-4)
+            if (blockMap[e.code]) {
+                selectedColor = blockMap[e.code];
+                document.querySelectorAll('.slot').forEach(s => s.classList.remove('active'));
+                const num = e.code.replace('Digit', '');
+                document.getElementById('slot' + num).classList.add('active');
+            }
+
+            if (e.code === 'Space' && canJump) { velocity.y = 0.16; canJump = false; }
+        });
+
+        window.addEventListener('keyup', e => keys[e.code] = false);
+
+        function animate() {
+            if (!gameActive) return;
+            requestAnimationFrame(animate);
+
+            velocity.y -= 0.008;
+            let nextV = camera.position.clone();
+            nextV.y += velocity.y;
+
+            if (!checkCollision(nextV)) {
+                camera.position.y += velocity.y;
+                canJump = false;
+            } else {
+                if (velocity.y < 0) canJump = true;
+                velocity.y = 0;
+            }
+
+            const speed = 0.14;
+            let move = new THREE.Vector3();
+            if (keys['KeyW']) move.z -= 1;
+            if (keys['KeyS']) move.z += 1;
+            if (keys['KeyA']) move.x -= 1;
+            if (keys['KeyD']) move.x += 1;
+
+            if (move.length() > 0) {
+                move.normalize().applyQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw));
+                let nextH = camera.position.clone().add(move.multiplyScalar(speed));
+                if (!checkCollision(nextH)) camera.position.copy(nextH);
+            }
+
+            if (camera.position.y < -15) {
+                camera.position.copy(spawnPos);
+                velocity.set(0,0,0);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
