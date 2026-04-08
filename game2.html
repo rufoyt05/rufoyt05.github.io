@@ -2,162 +2,169 @@
 <html lang="az">
 <head>
     <meta charset="UTF-8">
-    <title>Neon Parkour | Rufo YT CLASS</title>
+    <title>Rufo Parkour | Audi City Levels</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
-        canvas { display: block; }
-        #ui { position: absolute; top: 20px; left: 20px; color: white; pointer-events: none; z-index: 10; }
-        #instructions { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; cursor: pointer; text-align: center; }
-        #win-msg { position: absolute; top: 40%; width: 100%; text-align: center; color: #00ff00; font-size: 50px; font-weight: bold; display: none; text-shadow: 0 0 20px #00ff00; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Orbitron', sans-serif; }
+        #ui { position: absolute; bottom: 30px; right: 30px; color: white; text-align: right; z-index: 100; }
+        #speed { font-size: 70px; font-weight: 900; }
+        #level-ui { position: absolute; top: 30px; left: 30px; color: #00ff00; font-size: 24px; font-weight: bold; text-shadow: 0 0 10px #00ff00; }
+        #loading { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: #111; color: white; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 1000;
+        }
+        .bar { width: 200px; height: 5px; background: #333; margin-top: 10px; }
+        #prog { width: 0%; height: 100%; background: #00ff00; }
     </style>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@900&display=swap" rel="stylesheet">
 </head>
 <body>
 
+    <div id="loading">
+        <div id="status">Sistem Yüklənir...</div>
+        <div class="bar"><div id="prog"></div></div>
+    </div>
+
+    <div id="level-ui">LEVEL: <span id="lvl-num">1</span></div>
+
     <div id="ui">
-        <h2 style="color: #00ffff; margin: 0; text-shadow: 0 0 10px #00ffff;">NEON PARKOUR</h2>
-        <p>W,A,S,D - Hərəkət | SPACE - TULLANMA | ESC - Menyu</p>
+        <div id="speed">0</div>
+        <div style="color:#00ff00">KM/H</div>
     </div>
-
-    <div id="instructions">
-        <h1 style="color: #00ffff; font-size: 3rem;">NEON MACƏRASI</h1>
-        <p>Platformaların üzərindən tullan və sona çat!</p>
-        <p style="background: #00ffff; color: #000; padding: 10px 20px; border-radius: 5px; font-weight: bold; margin-top: 20px;">BAŞLAMAQ ÜÇÜN KLİKLƏ</p>
-    </div>
-
-    <div id="win-msg">SƏVİYYƏ TAMAMLANDI!</div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fflate/0.7.4/fflate.min.js"></script>
 
     <script>
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x020205);
-        scene.fog = new THREE.FogExp2(0x020205, 0.05);
+        let currentLevel = 1;
+        let speed = 0, angle = 0, targetAngle = 0;
+        let playerCar, world, finishLine;
+        const keys = {};
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 30000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.outputEncoding = THREE.sRGBEncoding;
         document.body.appendChild(renderer.domElement);
 
         // İşıqlandırma
-        scene.add(new THREE.AmbientLight(0xffffff, 0.3));
-        const pLight = new THREE.PointLight(0x00ffff, 1, 50);
-        scene.add(pLight);
+        scene.add(new THREE.AmbientLight(0xffffff, 2.0)); 
+        const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+        sun.position.set(500, 1000, 500);
+        scene.add(sun);
 
-        // OYUNÇU (Görünməz fizik qutu)
-        const player = new THREE.Group();
-        scene.add(player);
-        player.position.set(0, 2, 0);
+        const manager = new THREE.LoadingManager();
+        manager.onProgress = (url, loaded, total) => {
+            document.getElementById('prog').style.width = (loaded / total * 100) + '%';
+        };
+        manager.onLoad = () => {
+            document.getElementById('loading').style.display = 'none';
+            initLevel();
+            animate();
+        };
 
-        // PLATFORMALAR SİYAHISI
-        const platforms = [];
-        function createPlatform(x, y, z, w, d, color) {
-            const geo = new THREE.BoxGeometry(w, 0.5, d);
-            const mat = new THREE.MeshStandardMaterial({ 
-                color: color, 
-                emissive: color, 
-                emissiveIntensity: 0.5 
-            });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.set(x, y, z);
-            scene.add(mesh);
-            platforms.push(mesh);
-        }
+        const gltfLoader = new THREE.GLTFLoader(manager);
+        const fbxLoader = new THREE.FBXLoader(manager);
 
-        // Səviyyə Dizaynı (Parkur yolu)
-        createPlatform(0, 0, 0, 5, 5, 0x00ffff);      // Başlanğıc
-        createPlatform(0, 1, -8, 3, 3, 0xff00ff);     // 1-ci tullanış
-        createPlatform(5, 2, -15, 3, 3, 0xffff00);    // 2-ci tullanış
-        createPlatform(0, 3, -22, 4, 4, 0x00ff00);    // 3-cü tullanış
-        createPlatform(-6, 4, -30, 2, 6, 0xff0000);   // Dar keçid
-        createPlatform(0, 5, -40, 6, 6, 0xffffff);    // FİNİŞ (Ağ platforma)
-
-        // Dəyişənlər
-        let yaw = 0, pitch = 0;
-        let velocityY = 0;
-        let canJump = false;
-        const keys = {};
-
-        // Maus Kilidi
-        const inst = document.getElementById('instructions');
-        inst.addEventListener('click', () => document.body.requestPointerLock());
-        document.addEventListener('pointerlockchange', () => inst.style.display = document.pointerLockElement ? 'none' : 'flex');
-
-        document.addEventListener('mousemove', (e) => {
-            if (document.pointerLockElement) {
-                yaw -= e.movementX * 0.002;
-                pitch -= e.movementY * 0.002;
-                pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
-            }
-        });
-
-        window.addEventListener('keydown', e => {
-            keys[e.code] = true;
-            if (e.code === 'Space' && canJump) {
-                velocityY = 0.2;
-                canJump = false;
-            }
-        });
-        window.addEventListener('keyup', e => keys[e.code] = false);
-
-        function update() {
-            // Kamera hərəkəti
-            player.rotation.y = yaw;
-            camera.rotation.set(pitch, yaw, 0, 'YXZ');
-            camera.position.copy(player.position).add(new THREE.Vector3(0, 1.6, 0));
-            pLight.position.copy(player.position);
-
-            // Fizika və Gravitasiya
-            velocityY -= 0.01; // Cazibə qüvvəsi
-            player.position.y += velocityY;
-
-            // Platforma toqquşma yoxlanışı
-            canJump = false;
-            platforms.forEach(p => {
-                const pBox = new THREE.Box3().setFromObject(p);
-                const playerBox = new THREE.Box3().setFromCenterAndSize(
-                    player.position, 
-                    new THREE.Vector3(0.6, 2, 0.6)
-                );
-
-                if (playerBox.intersectsBox(pBox) && velocityY < 0) {
-                    if (player.position.y > p.position.y) {
-                        player.position.y = p.position.y + 0.25 + 1;
-                        velocityY = 0;
-                        canJump = true;
-                    }
+        // 1. DÜNYANI YÜKLƏ (FBX)
+        fbxLoader.load('Street environment_V01.FBX', function (object) {
+            world = object;
+            world.scale.set(0.005, 0.005, 0.005); 
+            world.position.set(0, 0, 0);
+            world.traverse(child => {
+                if (child.isMesh) {
+                    if (!child.material.map) child.material = new THREE.MeshStandardMaterial({color: 0x666666});
                 }
             });
+            scene.add(world);
+        });
 
-            // Dünyadan düşəndə yenidən başla
-            if (player.position.y < -10) {
-                player.position.set(0, 2, 0);
-                velocityY = 0;
-            }
+        // 2. AUDI YÜKLƏ (GLB)
+        gltfLoader.load('audi.glb', function(gltf) {
+            playerCar = gltf.scene;
+            playerCar.scale.set(1.5, 1.5, 1.5);
+            playerCar.rotation.y = Math.PI; 
+            scene.add(playerCar);
+        });
 
-            // Finiş yoxlanışı
-            if (player.position.z < -38 && player.position.y > 4.5) {
-                document.getElementById('win-msg').style.display = "block";
-            }
-
-            // Hərəkət
-            const speed = 0.12;
-            const dirZ = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
-            const dirX = new THREE.Vector3(1, 0, 0).applyQuaternion(player.quaternion);
-            if (keys['KeyW']) player.position.add(dirZ.multiplyScalar(speed));
-            if (keys['KeyS']) player.position.add(dirZ.multiplyScalar(-speed));
-            if (keys['KeyA']) player.position.add(dirX.multiplyScalar(-speed));
-            if (keys['KeyD']) player.position.add(dirX.multiplyScalar(speed));
-
-            renderer.render(scene, camera);
-            requestAnimationFrame(update);
+        // Finiş Darvazası Yaradan Funksiya
+        function initLevel() {
+            if (finishLine) scene.remove(finishLine);
+            
+            // Hər leveldə finiş daha uzağa qoyulur
+            const finishDist = -500 * currentLevel; 
+            
+            const geo = new THREE.BoxGeometry(40, 15, 2);
+            const mat = new THREE.MeshStandardMaterial({
+                color: 0x00ff00, 
+                emissive: 0x00ff00, 
+                transparent: true, 
+                opacity: 0.4
+            });
+            finishLine = new THREE.Mesh(geo, mat);
+            finishLine.position.set(0, 7, finishDist);
+            scene.add(finishLine);
+            
+            document.getElementById('lvl-num').innerText = currentLevel;
         }
 
-        update();
+        window.addEventListener('keydown', e => keys[e.code] = true);
+        window.addEventListener('keyup', e => keys[e.code] = false);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (!playerCar) return;
+
+            // Hərəkət məntiqi
+            const maxS = currentLevel > 1 ? 2.5 : 1.8; // Level artdıqca sürət limiti artır
+            if (keys['KeyW']) speed = Math.min(speed + 0.02, (keys['ShiftLeft'] ? maxS + 1.5 : maxS));
+            else if (keys['KeyS']) speed = Math.max(speed - 0.04, -1);
+            else speed *= 0.98;
+
+            if (Math.abs(speed) > 0.1) {
+                if (keys['KeyA']) targetAngle -= 0.04;
+                if (keys['KeyD']) targetAngle += 0.04;
+            }
+            angle += (targetAngle - angle) * 0.1;
+
+            playerCar.position.x += Math.sin(angle) * speed;
+            playerCar.position.z += Math.cos(angle) * speed;
+            playerCar.rotation.y = angle + Math.PI;
+
+            // Level Keçid Yoxlanışı
+            if (playerCar.position.z < finishLine.position.z) {
+                currentLevel++;
+                playerCar.position.set(0, 0, 0); // Starta qaytar
+                speed = 0;
+                initLevel(); // Yeni leveli başlat
+                alert("Təbriklər! Level " + currentLevel + " başladı!");
+            }
+
+            // Kamera takibi
+            const camOffset = new THREE.Vector3(0, 5, 15).applyQuaternion(playerCar.quaternion);
+            camera.position.lerp(playerCar.position.clone().add(camOffset), 0.1);
+            camera.lookAt(playerCar.position);
+
+            document.getElementById('speed').innerText = Math.floor(Math.abs(speed) * 100);
+            renderer.render(scene, camera);
+        }
+
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
+
+        // 15 saniyə təhlükəsizlik taymeri
+        setTimeout(() => {
+            if(document.getElementById('loading').style.display !== 'none') {
+                document.getElementById('loading').style.display = 'none';
+                animate();
+            }
+        }, 15000);
     </script>
 </body>
 </html>
